@@ -21,18 +21,22 @@ class GameTest extends TestCase
         $domainGame = DomainGame::open(GameId::generate(), Configuration::common(), 'player1');
 
         $expectedGameId = $domainGame->id()->toString();
-        $expectedFinished = false;
         $expectedSerializedGame = json_encode(
             [
                 'gameId' => $expectedGameId,
                 'chatId' => 'chatId',
-                'players' => [
-                    'player1',
-                    'player2'
-                ],
-                'finished' => $expectedFinished,
+                'openedBy' => 'player1',
+                'redPlayerId' => 'player1',
+                'yellowPlayerId' => 'player2',
+                'currentPlayerId' => 'player1',
+                'winnerId' => '',
+                'loserId' => '',
+                'resignedBy' => '',
+                'abortedBy' => '',
+                'state' => 'running',
                 'height' => 6,
                 'width' => 7,
+                'preferredStone' => 1,
                 'moves' => [
                     [
                         'x' => 1,
@@ -56,10 +60,13 @@ class GameTest extends TestCase
         $domainGame->move('player2', 1);
 
         $game = new Game();
+
+        $this->assertEquals($game::STATE_OPEN, $game->state);
+
         $this->applyFromDomainGame($game, $domainGame);
 
         $this->assertEquals($expectedGameId, $game->id());
-        $this->assertEquals($expectedFinished, $game->finished());
+        $this->assertEquals($game::STATE_RUNNING, $game->state);
         // Implicitly test if it's serializable.
         $this->assertEquals($expectedSerializedGame, json_encode($game, JSON_THROW_ON_ERROR));
     }
@@ -76,7 +83,8 @@ class GameTest extends TestCase
         $this->applyFromDomainGame($game, $domainGame);
 
         $this->assertEquals(true, $game->finished());
-        $this->assertEquals(true, $game->jsonSerialize()['finished']);
+        $this->assertEquals('player1', $game->abortedBy);
+        $this->assertEquals('', $game->currentPlayerId);
     }
 
     /**
@@ -94,7 +102,10 @@ class GameTest extends TestCase
         $this->applyFromDomainGame($game, $domainGame);
 
         $this->assertEquals(true, $game->finished());
-        $this->assertEquals(true, $game->jsonSerialize()['finished']);
+        $this->assertEquals('player2', $game->winnerId);
+        $this->assertEquals('player1', $game->resignedBy);
+        $this->assertEquals('', $game->loserId);
+        $this->assertEquals('', $game->currentPlayerId);
     }
 
     /**
@@ -123,21 +134,24 @@ class GameTest extends TestCase
             ]],
             json_decode(json_encode($game), true)['winningSequences']
         );
-        $this->assertEquals(true, json_decode(json_encode($game), true)['finished']);
+        $this->assertEquals($game::STATE_FINISHED, $game->state);
+        $this->assertEquals('player1', $game->winnerId);
+        $this->assertEquals('player2', $game->loserId);
+        $this->assertEquals('', $game->currentPlayerId);
     }
 
     /**
      * @test
      */
-    public function itShouldBeMarkedAsFinishedWhenGameDrawn(): void
+    public function itShouldBeMarkedAsDrawWhenGameDrawn(): void
     {
         $game = new Game();
         $game->apply(
-            new GameDrawn(GameId::generate())
+            new GameDrawn(GameId::generate(), ['player1', 'player2'])
         );
 
-        $this->assertEquals(true, $game->finished());
-        $this->assertEquals(true, $game->jsonSerialize()['finished']);
+        $this->assertEquals($game::STATE_DRAW, $game->state);
+        $this->assertEquals('', $game->currentPlayerId);
     }
 
     private function applyFromDomainGame(Game $game, DomainGame $domainGame): void

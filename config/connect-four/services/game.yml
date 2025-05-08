@@ -1,18 +1,11 @@
 services:
-    connect-four.game-controller:
-        class: Gaming\ConnectFour\Port\Adapter\Http\GameController
-        arguments: ['@connect-four.command-bus', '@connect-four.query-bus']
-
     connect-four.game-repository:
         class: Gaming\ConnectFour\Port\Adapter\Persistence\Repository\DoctrineJsonGameRepository
         arguments:
-            - '@connect-four.doctrine-dbal'
+            - '@connect-four.shards'
             - 'game'
             - '@connect-four.event-store'
             - '@connect-four.normalizer'
-            - !service
-                class: Gaming\Common\Sharding\Integration\Crc32ModShards
-                arguments: ['%env(csv:APP_CONNECT_FOUR_DOCTRINE_DBAL_SHARDS)%']
 
     connect-four.game-store:
         class: Gaming\ConnectFour\Port\Adapter\Persistence\Repository\PredisGameStore
@@ -20,7 +13,7 @@ services:
 
     connect-four.games-by-player-store:
         class: Gaming\ConnectFour\Port\Adapter\Persistence\Repository\PredisGamesByPlayerStore
-        arguments: ['@connect-four.predis', 'games-by-player:']
+        arguments: ['@connect-four.predis', 'games-by-player:', '@connect-four.game-store']
 
     connect-four.open-game-store:
         class: Gaming\ConnectFour\Port\Adapter\Persistence\Repository\PredisOpenGameStore

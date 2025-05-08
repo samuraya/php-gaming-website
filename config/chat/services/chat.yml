@@ -1,8 +1,4 @@
 services:
-    chat.chat-controller:
-        class: Gaming\Chat\Presentation\Http\ChatController
-        arguments: ['@chat.command-bus', '@chat.query-bus']
-
     chat.chat-gateway:
         class: Gaming\Chat\Infrastructure\DoctrineChatGateway
         arguments: ['@chat.doctrine-dbal', 'chat', 'message']
@@ -11,6 +7,8 @@ services:
         class: Gaming\Common\IdempotentStorage\PredisIdempotentStorage
         arguments: ['@chat.predis', 86400]
 
-    chat.chat-service:
-        class: Gaming\Chat\Application\ChatService
+    Gaming\Chat\Application\ChatService:
         arguments: ['@chat.chat-gateway', '@chat.event-store', '@clock', '@chat.idempotent-chat-id-storage']
+        tags:
+            - { name: 'gaming_platform_bus.handler', bus: 'chat_query', match: '/\\Query\\/' }
+            - { name: 'gaming_platform_bus.handler', bus: 'chat_command', match: '/\\Command\\/' }

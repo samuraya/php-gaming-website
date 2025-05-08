@@ -1,0 +1,7 @@
+services:
+    connect-four.lock-factory:
+        class: Symfony\Component\Lock\LockFactory
+        arguments:
+            - !service
+                class: Symfony\Component\Lock\Store\RedisStore
+                arguments: ['@connect-four.predis']

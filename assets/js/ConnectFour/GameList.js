@@ -1,21 +1,24 @@
 import {service} from './GameService.js'
 import {html} from 'uhtml/node.js'
+import * as sse from '../Common/EventSource.js'
 
 customElements.define('connect-four-game-list', class extends HTMLElement {
     connectedCallback() {
-        this._onDisconnect = [];
+        this._sseAbortController = new AbortController();
 
         this.append(html`
-            <table class="table table-nowrap user-select-none cursor-default">
-                <thead>
-                <tr>
-                    <th class="w-75">Player</th>
-                    <th>Rating</th>
-                </tr>
-                </thead>
-                <tbody class="cursor-pointer border-0">
-                </tbody>
-            </table>
+            <div class="card">
+                <table class="table table-nowrap user-select-none cursor-default card-table">
+                    <thead>
+                    <tr>
+                        <th class="w-75">Player</th>
+                        <th>Rating</th>
+                    </tr>
+                    </thead>
+                    <tbody class="cursor-pointer border-0">
+                    </tbody>
+                </table>
+            </div>
         `);
 
         this._games = this.querySelector('tbody');
@@ -31,7 +34,8 @@ customElements.define('connect-four-game-list', class extends HTMLElement {
     }
 
     disconnectedCallback() {
-        this._onDisconnect.forEach(f => f());
+        window.removeEventListener('WebInterface.UserArrived', this._onUserArrived);
+        this._sseAbortController.abort();
     }
 
     /**
@@ -41,7 +45,7 @@ customElements.define('connect-four-game-list', class extends HTMLElement {
     _addGame(gameId, playerId) {
         if (this._currentGamesInList.indexOf(gameId) === -1) {
             this._games.appendChild(
-                this._createGameNode(gameId, this._playerId === playerId)
+                this._createGameNode(gameId, playerId)
             );
         }
     }
@@ -135,13 +139,13 @@ customElements.define('connect-four-game-list', class extends HTMLElement {
 
     /**
      * @param {String} gameId
-     * @param {Boolean} isCurrentUserThePlayer
+     * @param {String} playerId
      * @returns {Node}
      */
-    _createGameNode(gameId, isCurrentUserThePlayer) {
+    _createGameNode(gameId, playerId) {
         let row = html`
-            <tr data="${{gameId}}"
-                class="${isCurrentUserThePlayer ? 'table-success' : 'table-light'}">
+            <tr data="${{gameId, playerId}}"
+                class="${this._playerId === playerId ? 'table-success' : 'table-light'}">
                 <td>Anonymous</td><td></td>
             </tr>
         `;
@@ -154,7 +158,7 @@ customElements.define('connect-four-game-list', class extends HTMLElement {
             row.classList.add('table-secondary', 'cursor-default');
             row.classList.remove('table-success', 'table-light');
 
-            if (isCurrentUserThePlayer) {
+            if (this._playerId === playerId) {
                 service.abort(gameId)
                     .then(() => true)
                     .catch(() => {
@@ -212,20 +216,19 @@ customElements.define('connect-four-game-list', class extends HTMLElement {
         this._scheduleRemovingOfGame(event.detail.gameId);
     }
 
+    _onUserArrived = event => {
+        this._playerId = event.detail.userId;
+
+        this.querySelectorAll(`[data-player-id="${this._playerId}"]`)
+            .forEach(game => game.classList.replace('table-light', 'table-success'));
+    }
+
     _registerEventHandler() {
-        ((n, f) => {
-            window.addEventListener(n, f);
-            this._onDisconnect.push(() => window.removeEventListener(n, f));
-        })('ConnectFour.GameOpened', this._onGameOpened.bind(this));
-
-        ((n, f) => {
-            window.addEventListener(n, f);
-            this._onDisconnect.push(() => window.removeEventListener(n, f));
-        })('ConnectFour.PlayerJoined', this._onPlayerJoinedOrGameAborted.bind(this));
-
-        ((n, f) => {
-            window.addEventListener(n, f);
-            this._onDisconnect.push(() => window.removeEventListener(n, f));
-        })('ConnectFour.GameAborted', this._onPlayerJoinedOrGameAborted.bind(this));
+        window.addEventListener('WebInterface.UserArrived', this._onUserArrived);
+        sse.subscribe('lobby', {
+            'ConnectFour.GameOpened': this._onGameOpened.bind(this),
+            'ConnectFour.PlayerJoined': this._onPlayerJoinedOrGameAborted.bind(this),
+            'ConnectFour.GameAborted': this._onPlayerJoinedOrGameAborted.bind(this)
+        }, this._sseAbortController.signal);
     }
 });

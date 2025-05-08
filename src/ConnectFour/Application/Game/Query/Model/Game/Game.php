@@ -13,7 +13,6 @@ use Gaming\ConnectFour\Domain\Game\Event\GameWon;
 use Gaming\ConnectFour\Domain\Game\Event\PlayerJoined;
 use Gaming\ConnectFour\Domain\Game\Event\PlayerMoved;
 use Gaming\ConnectFour\Domain\Game\WinningRule\WinningSequence;
-use JsonSerializable;
 use RuntimeException;
 
 /**
@@ -24,55 +23,59 @@ use RuntimeException;
  * we send the user the latest projection from the event store. This way, the domain model
  * itself stays clean and gets not inflated by a bunch of getters.
  */
-final class Game implements JsonSerializable
+final class Game
 {
-    private string $gameId = '';
-
-    private string $chatId = '';
-
-    /**
-     * @var string[]
-     */
-    private array $players = [];
-
-    private int $width = 0;
-
-    private int $height = 0;
-
-    private bool $finished = false;
+    public const STATE_OPEN = 'open';
+    public const STATE_RUNNING = 'running';
+    public const STATE_DRAW = 'draw';
+    public const STATE_FINISHED = 'finished';
 
     /**
-     * @var WinningSequence[]
+     * @param Move[] $moves
+     * @param WinningSequence[] $winningSequences
      */
-    private array $winningSequences = [];
+    public function __construct(
+        public private(set) string $gameId = '',
+        public private(set) string $chatId = '',
+        public private(set) string $openedBy = '',
+        public private(set) string $redPlayerId = '',
+        public private(set) string $yellowPlayerId = '',
+        public private(set) string $currentPlayerId = '',
+        public private(set) string $winnerId = '',
+        public private(set) string $loserId = '',
+        public private(set) string $resignedBy = '',
+        public private(set) string $abortedBy = '',
+        public private(set) string $state = self::STATE_OPEN,
+        public private(set) int $height = 0,
+        public private(set) int $width = 0,
+        public private(set) ?int $preferredStone = null,
+        public private(set) array $moves = [],
+        public private(set) array $winningSequences = []
+    ) {
+    }
 
     /**
-     * @var Move[]
+     * @deprecated Use property instead.
      */
-    private array $moves = [];
-
     public function id(): string
     {
         return $this->gameId;
     }
 
+    /**
+     * @deprecated Use property instead.
+     */
     public function finished(): bool
     {
-        return $this->finished;
+        return $this->state === self::STATE_FINISHED || $this->state === self::STATE_DRAW;
     }
 
-    public function jsonSerialize(): mixed
+    /**
+     * @return string[]
+     */
+    public function players(): array
     {
-        return [
-            'gameId' => $this->gameId,
-            'chatId' => $this->chatId,
-            'players' => $this->players,
-            'finished' => $this->finished,
-            'height' => $this->height,
-            'width' => $this->width,
-            'moves' => $this->moves,
-            'winningSequences' => $this->winningSequences
-        ];
+        return array_filter([$this->redPlayerId, $this->yellowPlayerId]);
     }
 
     /**
@@ -85,9 +88,9 @@ final class Game implements JsonSerializable
             GameOpened::class => $this->handleGameOpened($domainEvent),
             PlayerJoined::class => $this->handlePlayerJoined($domainEvent),
             PlayerMoved::class => $this->handlePlayerMoved($domainEvent),
-            GameAborted::class,
-            GameDrawn::class,
-            GameResigned::class => $this->markAsFinished(),
+            GameAborted::class => $this->handleGameAborted($domainEvent),
+            GameDrawn::class => $this->handleGameDrawn($domainEvent),
+            GameResigned::class => $this->handleGameResigned($domainEvent),
             GameWon::class => $this->handleGameWon($domainEvent),
             ChatAssigned::class => $this->handleChatAssigned($domainEvent),
             default => throw new RuntimeException($domainEvent::class . ' must be handled.')
@@ -99,16 +102,22 @@ final class Game implements JsonSerializable
         $this->gameId = $gameOpened->aggregateId();
         $this->width = $gameOpened->width();
         $this->height = $gameOpened->height();
-        $this->addPlayer($gameOpened->playerId());
+        $this->preferredStone = $gameOpened->preferredStone;
+        $this->openedBy = $gameOpened->playerId();
     }
 
     private function handlePlayerJoined(PlayerJoined $playerJoined): void
     {
-        $this->addPlayer($playerJoined->joinedPlayerId());
+        $this->currentPlayerId = $this->redPlayerId = $playerJoined->redPlayerId;
+        $this->yellowPlayerId = $playerJoined->yellowPlayerId;
+
+        $this->state = self::STATE_RUNNING;
     }
 
     private function handlePlayerMoved(PlayerMoved $playerMoved): void
     {
+        $this->currentPlayerId = $playerMoved->nextPlayerId;
+
         $move = new Move(
             $playerMoved->x(),
             $playerMoved->y(),
@@ -120,9 +129,31 @@ final class Game implements JsonSerializable
         }
     }
 
+    private function handleGameAborted(GameAborted $gameAborted): void
+    {
+        $this->abortedBy = $gameAborted->abortedPlayerId();
+
+        $this->markAsFinished();
+    }
+
+    private function handleGameDrawn(GameDrawn $gameDrawn): void
+    {
+        $this->markAsFinished(self::STATE_DRAW);
+    }
+
+    private function handleGameResigned(GameResigned $gameResigned): void
+    {
+        $this->winnerId = $gameResigned->opponentPlayerId();
+        $this->resignedBy = $gameResigned->resignedPlayerId();
+
+        $this->markAsFinished();
+    }
+
     private function handleGameWon(GameWon $gameWon): void
     {
         $this->winningSequences = $gameWon->winningSequences();
+        $this->winnerId = $gameWon->winnerId;
+        $this->loserId = $gameWon->loserId;
 
         $this->markAsFinished();
     }
@@ -132,15 +163,9 @@ final class Game implements JsonSerializable
         $this->chatId = $chatAssigned->chatId();
     }
 
-    private function markAsFinished(): void
+    private function markAsFinished(string $state = self::STATE_FINISHED): void
     {
-        $this->finished = true;
-    }
-
-    private function addPlayer(string $playerId): void
-    {
-        if (!in_array($playerId, $this->players)) {
-            $this->players[] = $playerId;
-        }
+        $this->state = $state;
+        $this->currentPlayerId = '';
     }
 }

@@ -35,6 +35,23 @@ final class PredisGameStore implements GameStore
         return $storedGame ? $this->deserializeGame($storedGame) : $this->fallbackGameFinder->find($gameId);
     }
 
+    public function findMany(array $gameIds): array
+    {
+        if (count($gameIds) === 0) {
+            return [];
+        }
+
+        return array_map(
+            fn(?string $storedGame, GameId $gameId): Game => $storedGame !== null
+                ? $this->deserializeGame($storedGame)
+                : $this->fallbackGameFinder->find($gameId),
+            $this->predis->mget(
+                array_map(fn(GameId $gameId): string => $this->storageKeyPrefix . $gameId, $gameIds)
+            ),
+            $gameIds
+        );
+    }
+
     public function persist(Game $game): void
     {
         $this->pendingGames[$game->id()] = $game;

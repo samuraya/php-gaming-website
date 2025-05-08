@@ -1,0 +1,36 @@
+{% extends 'layout/base.html.twig' %}
+{% from "macro/alert.html.twig" import alert %}
+
+{% block body %}
+    <div class="page page-center" data-page-content>
+        <div class="container container-tight">
+            <p class="text-center fw-medium my-5">
+                <a href="{{ path('lobby') }}" class="link-secondary navbar-brand-autodark text-decoration-none">
+                    <img src="{{ asset('img/logo.png') }}"
+                         alt="Gaming Platform"
+                         width="32"
+                         height="32"
+                         class="navbar-brand-image pe-2"/>
+                    Gaming Platform
+                </a>
+            </p>
+            {% for label, messages in app.flashes %}
+                {% for message in messages %}
+                    {{ alert(message: message, important: true, type: label, classes: ['mb-4']) }}
+                {% endfor %}
+            {% endfor %}
+            {% if lastAuthenticationError is defined and lastAuthenticationError %}
+                {{ alert(
+                    message: 'Oops! ' ~ lastAuthenticationError.messageKey|trans(lastAuthenticationError.messageData, 'security'),
+                    important: true,
+                    type: 'danger',
+                    classes: ['mb-4']
+                ) }}
+            {% endif %}
+            {% block content %}{% endblock %}
+            <ul class="text-center list-inline list-inline-dots my-5">
+                {% include 'layout/partial/footer-links.html.twig' %}
+            </ul>
+        </div>
+    </div>
+{% endblock %}

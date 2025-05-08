@@ -25,6 +25,7 @@ monolog:
             formatter: 'monolog.formatter.json'
 
 twig:
+    form_themes: ['tabler_form_layout.html.twig']
     strict_variables: '%kernel.debug%'
 
 services:
@@ -108,6 +109,17 @@ services:
     gaming.scheduler:
         class: Gaming\Common\Scheduler\PcntlScheduler
 
+    gaming.browser-notifier:
+        class: Gaming\Common\BrowserNotifier\Integration\NchanBrowserNotifier
+        arguments:
+            - !service
+                class: Marein\Nchan\Nchan
+                arguments:
+                    - '%env(APP_NCHAN_BASE_URL)%'
+                    - !service
+                        class: Marein\Nchan\HttpAdapter\Psr18ClientAdapter
+                        arguments: ['@psr18.http_client', '@psr18.http_client', '@psr18.http_client']
+
     # Custom exception listener for the gaming domain.
     # Lower priority so that the profiler is respected.
     # todo: This can be removed as soon as https://github.com/marein/php-gaming-website/issues/34 is done.
@@ -118,3 +130,12 @@ services:
     Gaming\Common\Bus\Integration\ApplicationExceptionToJsonListener:
         arguments: [[]]
         tags: [{ name: kernel.event_listener, event: kernel.exception, priority: -99 }]
+
+    Gaming\WebInterface\Infrastructure\Symfony\HandleFragmentExceptions:
+        arguments: ['#^/_fragment#']
+        tags: [{ name: kernel.event_listener, event: kernel.exception, priority: -98 }]
+
+    Gaming\WebInterface\Infrastructure\Symfony\NotifyBrowserAboutLogin:
+        tags:
+            -   { name: kernel.event_listener, event: security.interactive_login }
+            -   { name: kernel.event_listener, event: kernel.response }

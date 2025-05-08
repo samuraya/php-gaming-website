@@ -1,9 +1,10 @@
 import {service} from './ChatService.js'
 import {html} from 'uhtml/node.js'
+import * as sse from '../Common/EventSource.js'
 
 customElements.define('chat-widget', class extends HTMLElement {
     connectedCallback() {
-        this._onDisconnect = [];
+        this._sseAbortController = new AbortController();
 
         this.append(this._rootElement = html`
             <div class="card gp-loading" style="height: 400px" id="chat">
@@ -33,26 +34,33 @@ customElements.define('chat-widget', class extends HTMLElement {
         this._secondsBeforeRetryAfterLoadMessageFailure = parseInt(this.getAttribute('seconds-before-retry'));
 
         const chatId = this.getAttribute('chat-id');
-        if (chatId) {
-            this._initialize(chatId);
-        }
+        if (chatId) this._initialize(chatId);
 
-        this._registerEventHandler();
+        window.addEventListener('WebInterface.UserArrived', this._onUserArrived);
+        sse.subscribe(this.getAttribute('game-channel'), {
+            'ConnectFour.ChatAssigned': this._onChatAssigned.bind(this)
+        }, this._sseAbortController.signal);
     }
 
     disconnectedCallback() {
-        this._onDisconnect.forEach(f => f());
+        window.removeEventListener('WebInterface.UserArrived', this._onUserArrived);
+        this._sseAbortController.abort();
     }
 
     /**
      * @param {String} chatId
      */
     _initialize(chatId) {
-        if (this._chatId === '') {
-            this._chatId = chatId;
+        if (this._chatId !== '') return;
 
-            this._loadMessages(chatId);
-        }
+        this._chatId = chatId;
+        this._loadMessages(chatId);
+
+        this._input.addEventListener('keypress', this._onKeyPress.bind(this));
+
+        sse.subscribe(`chat-${chatId}`, {
+            'Chat.MessageWritten': this._onMessageWritten.bind(this)
+        }, this._sseAbortController.signal);
     }
 
     /**
@@ -117,19 +125,18 @@ customElements.define('chat-widget', class extends HTMLElement {
         const isSameAuthor = this._authorId === message.authorId;
 
         return html`
-            <div class="chat-item" data-id="${message.messageId}">
-                <div class="${`row${isSameAuthor ? ' align-items-end justify-content-end' : ''}`}">
-                    <div class="col-11">
-                        <div class="${`chat-bubble${isSameAuthor ? ' chat-bubble-me' : ''}`}">
-                            <div class="chat-bubble-title">
-                                <div class="row">
-                                    <div class="col chat-bubble-author">${'Anonymous'}</div>
-                                    <div class="col-auto chat-bubble-date">${hours + ':' + minutes}</div>
-                                </div>
+            <div class="${`row${isSameAuthor ? ' align-items-end justify-content-end' : ''}`}"
+                 data-id="${message.messageId}" data-author-id="${message.authorId}">
+                <div class="col-11">
+                    <div class="${`chat-bubble${isSameAuthor ? ' chat-bubble-me' : ''}`}">
+                        <div class="chat-bubble-title">
+                            <div class="row">
+                                <div class="col chat-bubble-author">${'Anonymous'}</div>
+                                <div class="col-auto chat-bubble-date">${hours + ':' + minutes}</div>
                             </div>
-                            <div class="chat-bubble-body">
-                                <p>${message.message}</p>
-                            </div>
+                        </div>
+                        <div class="chat-bubble-body">
+                            <p>${message.message}</p>
                         </div>
                     </div>
                 </div>
@@ -165,22 +172,15 @@ customElements.define('chat-widget', class extends HTMLElement {
     }
 
     _onChatAssigned(event) {
-        window.dispatchEvent(new CustomEvent('sse:addsubscription', {detail: {name: 'chat-' + event.detail.chatId}}));
-
         this._initialize(event.detail.chatId);
     }
 
-    _registerEventHandler() {
-        this._input.addEventListener('keypress', this._onKeyPress.bind(this));
+    _onUserArrived = event => {
+        this._authorId = event.detail.userId;
 
-        ((n, f) => {
-            window.addEventListener(n, f);
-            this._onDisconnect.push(() => window.removeEventListener(n, f));
-        })('Chat.MessageWritten', this._onMessageWritten.bind(this));
-
-        ((n, f) => {
-            window.addEventListener(n, f);
-            this._onDisconnect.push(() => window.removeEventListener(n, f));
-        })('ConnectFour.ChatAssigned', this._onChatAssigned.bind(this));
+        this.querySelectorAll(`[data-author-id="${this._authorId}"]`).forEach(message => {
+            message.querySelector('.chat-bubble').classList.add('chat-bubble-me');
+            message.querySelector('.row').classList.add('align-items-end', 'justify-content-end');
+        });
     }
 });

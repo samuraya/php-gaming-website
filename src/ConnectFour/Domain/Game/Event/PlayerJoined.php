@@ -6,21 +6,19 @@ namespace Gaming\ConnectFour\Domain\Game\Event;
 
 use Gaming\Common\Domain\DomainEvent;
 use Gaming\ConnectFour\Domain\Game\GameId;
-use Gaming\ConnectFour\Domain\Game\Player;
 
 final class PlayerJoined implements DomainEvent
 {
     private string $gameId;
 
-    private string $joinedPlayerId;
-
-    private string $opponentPlayerId;
-
-    public function __construct(GameId $gameId, Player $joinedPlayer, Player $opponentPlayer)
-    {
+    public function __construct(
+        GameId $gameId,
+        private readonly string $joinedPlayerId,
+        private readonly string $opponentPlayerId,
+        public readonly string $redPlayerId,
+        public readonly string $yellowPlayerId
+    ) {
         $this->gameId = $gameId->toString();
-        $this->joinedPlayerId = $joinedPlayer->id();
-        $this->opponentPlayerId = $opponentPlayer->id();
     }
 
     public function aggregateId(): string

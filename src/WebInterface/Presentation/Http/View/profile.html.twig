@@ -1,17 +1,108 @@
-{% extends '@web-interface/layout/fluid.html.twig' %}
+{% extends 'layout/condensed.html.twig' %}
 
 {% set page_title = 'Profile' %}
 
 {% block content %}
-    <div class="card">
-        <div class="card-body">
-            {% for game in games %}
-                <p>
-                    <a href="{{ path('game', {id: game}) }}">
-                        Anonymous - Anonymous
+    <div class="row mb-3">
+        <div class="col">
+            <h2 class="page-title">Game History</h2>
+            <div class="text-secondary mt-1">Analyze your game history</div>
+        </div>
+        <div class="col-auto align-content-end">
+            {{ render_ssi(controller('connect-four.fragment-controller::openAction')) }}
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-4 col-lg-3">
+            {{ render_ssi(controller(
+                'connect-four.fragment-controller::playerSearchFilterAction',
+                {},
+                app.request.query.all|filter((v, k) => k == 'state')
+            )) }}
+        </div>
+        <div class="col-md-8 col-lg-9 gp-cf-game-list">
+            <p class="small mb-1">
+                <span class="text-secondary">
+                    State: {{ app.request.query.get('state', 'all')|capitalize }}
+                    •
+                    Page: {{ max(1, app.request.query.getInt('page', 1)) }}
+                </span>
+                {% if app.request.query.get('state', 'all') != 'all' or app.request.query.get('page', 1) != 1 %}
+                    <span class="text-secondary">•</span>
+                    <a href="{{ path('profile') }}">
+                        Clear all filters
                     </a>
-                </p>
-            {% endfor %}
+                {% endif %}
+            </p>
+            <div class="row row-deck row-cards">
+                {% for game in gamesByPlayer.games %}
+                    <div class="col-sm-6 col-lg-4">
+                        <div class="card">
+                            <div class="card-body d-flex flex-column">
+                                <p class="fs-2">
+                                    Standard • {{ game.width }} x {{ game.height }}
+                                </p>
+                                <connect-four-players game-id="{{ game.gameId }}"
+                                                      player-id="{{ app.user ? app.user.userIdentifier }}"
+                                                      red-player-id="{{ game.redPlayerId }}"
+                                                      yellow-player-id="{{ game.yellowPlayerId }}"
+                                                      current-player-id="{{ game.currentPlayerId }}"
+                                                      winner-id="{{ game.winnerId }}"
+                                                      loser-id="{{ game.loserId }}"
+                                                      resigned-by="{{ game.resignedBy }}"
+                                                      aborted-by="{{ game.abortedBy }}"
+                                                      game-state="{{ game.state }}"
+                                                      text-you="You"
+                                                      text-won="Won"
+                                                      text-lost="Lost"
+                                                      text-draw="Draw"
+                                                      text-resigned="Resigned"
+                                                      text-aborted="Aborted">
+                                    <p class="mb-1" data-red-player>
+                                        <span class="status-dot status-red"></span>
+                                        <span data-username>Anonymous</span>
+                                    </p>
+                                    <p data-yellow-player>
+                                        <span class="status-dot status-yellow"></span>
+                                        <span data-username>Anonymous</span>
+                                    </p>
+                                </connect-four-players>
+                                <connect-four-game class="flex-fill align-content-end"
+                                                   game="{{ game|json_encode|e('html_attr') }}"
+                                                   player-id="{{ app.user ? app.user.userIdentifier|e('html_attr') }}">
+                                    <div style="aspect-ratio: {{ game.width }}/{{ game.height }};"></div>
+                                </connect-four-game>
+                            </div>
+                            <a href="{{ path('game', {'id': game.gameId}) }}"
+                               class="card-btn flex-grow-0">
+                                Show game
+                            </a>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="col">
+                        <div class="card">
+                            <div class="empty">
+                                <p class="empty-title">No games found</p>
+                                <p class="empty-subtitle text-secondary mb-0">
+                                    Try adjusting your filter or start a new game with the button above.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+                {% if gamesByPlayer.total > 0 %}
+                    <div class="col-12">
+                        {% include 'include/pagination.html.twig' with {
+                            'page': app.request.query.getInt('page', 1),
+                            'total': gamesByPlayer.total,
+                            'limit': gamesPerPage,
+                            'previousTitle': 'Games',
+                            'nextTitle': 'Games'
+                        } %}
+                    </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 {% endblock %}

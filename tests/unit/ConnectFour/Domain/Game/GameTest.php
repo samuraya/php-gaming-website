@@ -446,6 +446,7 @@ class GameTest extends TestCase
         self::assertEquals('playerId1', $domainEvents[0]->playerId());
         self::assertEquals(7, $domainEvents[0]->width());
         self::assertEquals(6, $domainEvents[0]->height());
+        self::assertEquals(1, $domainEvents[0]->preferredStone);
 
         return $game;
     }
@@ -463,6 +464,8 @@ class GameTest extends TestCase
         self::assertEquals($game->id()->toString(), $domainEvents[0]->aggregateId());
         self::assertEquals('playerId1', $domainEvents[0]->opponentPlayerId());
         self::assertEquals('playerId2', $domainEvents[0]->joinedPlayerId());
+        self::assertEquals('playerId1', $domainEvents[0]->redPlayerId);
+        self::assertEquals('playerId2', $domainEvents[0]->yellowPlayerId);
 
         return $game;
     }
@@ -495,8 +498,8 @@ class GameTest extends TestCase
         $domainEvents = $game->flushDomainEvents();
         self::assertCount(3, $domainEvents);
 
-        $this->assertPlayerMoved($domainEvents[0], $game->id()->toString(), 1, 6, Stone::Red->value);
-        $this->assertPlayerMoved($domainEvents[1], $game->id()->toString(), 1, 5, Stone::Yellow->value);
+        $this->assertPlayerMoved($domainEvents[0], $game->id(), 1, 6, Stone::Red, 'playerId1', 'playerId2');
+        $this->assertPlayerMoved($domainEvents[1], $game->id(), 1, 5, Stone::Yellow, 'playerId2', 'playerId1');
 
         assert($domainEvents[2] instanceof GameResigned);
         self::assertEquals($game->id()->toString(), $domainEvents[2]->aggregateId());
@@ -519,17 +522,19 @@ class GameTest extends TestCase
         $domainEvents = $game->flushDomainEvents();
         self::assertCount(8, $domainEvents);
 
-        $this->assertPlayerMoved($domainEvents[0], $game->id()->toString(), 1, 6, Stone::Red->value);
-        $this->assertPlayerMoved($domainEvents[1], $game->id()->toString(), 2, 6, Stone::Yellow->value);
-        $this->assertPlayerMoved($domainEvents[2], $game->id()->toString(), 1, 5, Stone::Red->value);
-        $this->assertPlayerMoved($domainEvents[3], $game->id()->toString(), 2, 5, Stone::Yellow->value);
-        $this->assertPlayerMoved($domainEvents[4], $game->id()->toString(), 1, 4, Stone::Red->value);
-        $this->assertPlayerMoved($domainEvents[5], $game->id()->toString(), 2, 4, Stone::Yellow->value);
-        $this->assertPlayerMoved($domainEvents[6], $game->id()->toString(), 1, 3, Stone::Red->value);
+        $this->assertPlayerMoved($domainEvents[0], $game->id(), 1, 6, Stone::Red, 'playerId1', 'playerId2');
+        $this->assertPlayerMoved($domainEvents[1], $game->id(), 2, 6, Stone::Yellow, 'playerId2', 'playerId1');
+        $this->assertPlayerMoved($domainEvents[2], $game->id(), 1, 5, Stone::Red, 'playerId1', 'playerId2');
+        $this->assertPlayerMoved($domainEvents[3], $game->id(), 2, 5, Stone::Yellow, 'playerId2', 'playerId1');
+        $this->assertPlayerMoved($domainEvents[4], $game->id(), 1, 4, Stone::Red, 'playerId1', 'playerId2');
+        $this->assertPlayerMoved($domainEvents[5], $game->id(), 2, 4, Stone::Yellow, 'playerId2', 'playerId1');
+        $this->assertPlayerMoved($domainEvents[6], $game->id(), 1, 3, Stone::Red, 'playerId1', 'playerId2');
 
         assert($domainEvents[7] instanceof GameWon);
         self::assertEquals($game->id()->toString(), $domainEvents[7]->aggregateId());
         self::assertEquals('playerId1', $domainEvents[7]->winnerPlayerId());
+        self::assertEquals('playerId1', $domainEvents[7]->winnerId);
+        self::assertEquals('playerId2', $domainEvents[7]->loserId);
         self::assertEquals(
             [new WinningSequence('vertical', [new Point(1, 3), new Point(1, 4), new Point(1, 5), new Point(1, 6)])],
             $domainEvents[7]->winningSequences()
@@ -542,9 +547,10 @@ class GameTest extends TestCase
     {
         $game = Game::open(
             GameId::generate(),
-            Configuration::custom(
+            new Configuration(
                 new Size(2, 2),
-                WinningRules::standard()
+                WinningRules::standard(),
+                Stone::Red
             ),
             'playerId1'
         );
@@ -563,29 +569,42 @@ class GameTest extends TestCase
         self::assertEquals('playerId1', $domainEvents[0]->playerId());
         self::assertEquals(2, $domainEvents[0]->width());
         self::assertEquals(2, $domainEvents[0]->height());
+        self::assertEquals(1, $domainEvents[0]->preferredStone);
 
         assert($domainEvents[1] instanceof PlayerJoined);
         self::assertEquals($game->id()->toString(), $domainEvents[1]->aggregateId());
         self::assertEquals('playerId2', $domainEvents[1]->joinedPlayerId());
         self::assertEquals('playerId1', $domainEvents[1]->opponentPlayerId());
+        self::assertEquals('playerId1', $domainEvents[1]->redPlayerId);
+        self::assertEquals('playerId2', $domainEvents[1]->yellowPlayerId);
 
-        $this->assertPlayerMoved($domainEvents[2], $game->id()->toString(), 1, 2, Stone::Red->value);
-        $this->assertPlayerMoved($domainEvents[3], $game->id()->toString(), 2, 2, Stone::Yellow->value);
-        $this->assertPlayerMoved($domainEvents[4], $game->id()->toString(), 1, 1, Stone::Red->value);
-        $this->assertPlayerMoved($domainEvents[5], $game->id()->toString(), 2, 1, Stone::Yellow->value);
+        $this->assertPlayerMoved($domainEvents[2], $game->id(), 1, 2, Stone::Red, 'playerId1', 'playerId2');
+        $this->assertPlayerMoved($domainEvents[3], $game->id(), 2, 2, Stone::Yellow, 'playerId2', 'playerId1');
+        $this->assertPlayerMoved($domainEvents[4], $game->id(), 1, 1, Stone::Red, 'playerId1', 'playerId2');
+        $this->assertPlayerMoved($domainEvents[5], $game->id(), 2, 1, Stone::Yellow, 'playerId2', 'playerId1');
 
         assert($domainEvents[6] instanceof GameDrawn);
         self::assertEquals($game->id()->toString(), $domainEvents[6]->aggregateId());
+        self::assertEquals(['playerId2', 'playerId1'], $domainEvents[6]->playerIds);
 
         return $game;
     }
 
-    private function assertPlayerMoved(object $playerMoved, string $gameId, int $x, int $y, int $color): void
-    {
+    private function assertPlayerMoved(
+        object $playerMoved,
+        GameId $gameId,
+        int $x,
+        int $y,
+        Stone $stone,
+        string $playerId,
+        string $nextPlayerId
+    ): void {
         assert($playerMoved instanceof PlayerMoved);
-        self::assertEquals($gameId, $playerMoved->aggregateId());
+        self::assertEquals($gameId->toString(), $playerMoved->aggregateId());
         self::assertEquals($x, $playerMoved->x());
         self::assertEquals($y, $playerMoved->y());
-        self::assertEquals($color, $playerMoved->color());
+        self::assertEquals($stone->value, $playerMoved->color());
+        self::assertEquals($playerId, $playerMoved->playerId);
+        self::assertEquals($nextPlayerId, $playerMoved->nextPlayerId);
     }
 }

@@ -1,5 +1,13 @@
 imports: [{ resource: services/ }]
 
+gaming_platform_bus:
+    buses:
+        connect_four_command: ~
+        connect_four_query: ~
+
+twig:
+    paths: { '%kernel.project_dir%/src/ConnectFour/Port/Adapter/Http/View': connect-four }
+
 doctrine:
     dbal:
         connections:
